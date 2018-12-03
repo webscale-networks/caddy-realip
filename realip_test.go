@@ -8,31 +8,33 @@ import (
 
 	"bytes"
 	"fmt"
+
 	"github.com/mholt/caddy"
 	"github.com/mholt/caddy/caddyhttp/httpserver"
 )
 
 func TestRealIP(t *testing.T) {
 	for i, test := range []struct {
-		actualIP   string
-		headerVal  string
-		expectedIP string
+		actualIP       string
+		headerVal      string
+		expectedIP     string
+		expectedHeader string
 	}{
-		{"1.2.3.4:123", "", "1.2.3.4:123"},
-		{"4.4.255.255:123", "", "4.4.255.255:123"},
-		{"4.5.0.0:123", "1.2.3.4", "1.2.3.4:123"},
+		{"1.2.3.4:123", "", "1.2.3.4:123", ""},
+		{"4.4.255.255:123", "", "4.4.255.255:123", ""},
+		{"4.5.0.0:123", "1.2.3.4", "1.2.3.4:123", ""},
 
 		// because 111.111.111.111 is NOT in a trusted subnet, the next in the chain should not be trusted
-		{"4.5.2.3:123", "1.2.6.7,5.6.7.8,111.111.111.111", "111.111.111.111:123"},
-		{"4.5.5.5:123", "NOTANIP", "4.5.5.5:123"},
-		{"aaaaaa", "1.2.3.4", "aaaaaa"},
-		{"aaaaaa:123", "1.2.3.4", "aaaaaa:123"},
+		{"4.5.2.3:123", "1.2.6.7,5.6.7.8,111.111.111.111", "111.111.111.111:123", "1.2.6.7,5.6.7.8"},
+		{"4.5.5.5:123", "NOTANIP", "4.5.5.5:123", ""},
+		{"aaaaaa", "1.2.3.4", "aaaaaa", ""},
+		{"aaaaaa:123", "1.2.3.4", "aaaaaa:123", ""},
 
-		{"4.5.2.3:123", "1.2.6.7,5.6.7.8,4.5.6.7", "5.6.7.8:123"},
+		{"4.5.2.3:123", "1.2.6.7,5.6.7.8,4.5.6.7", "5.6.7.8:123", "1.2.6.7"},
 
 		// expectedIP is empty because the server should have returned a 403
 		// since the chain is longer than the configured max (5)
-		{"4.5.2.3:123", "1.2.6.7,5.6.7.8,4.5.6.7,5.6.7.8,4.5.6.7,1.2.3.4", ""},
+		{"4.5.2.3:123", "1.2.6.7,5.6.7.8,4.5.6.7,5.6.7.8,4.5.6.7,1.2.3.4", "", ""},
 	} {
 		remoteAddr := ""
 		_, ipnet, err := net.ParseCIDR("4.5.0.0/16") // "4.5.x.x"
@@ -64,6 +66,10 @@ func TestRealIP(t *testing.T) {
 
 		if remoteAddr != test.expectedIP {
 			t.Errorf("Test %d: Expected '%s', but found '%s'", i, test.expectedIP, remoteAddr)
+		}
+		actualHeader := req.Header.Get("X-Real-IP")
+		if actualHeader != test.expectedHeader {
+			t.Errorf("Test %d: Expected header '%s', but found '%s'", i, test.expectedHeader, actualHeader)
 		}
 	}
 }
