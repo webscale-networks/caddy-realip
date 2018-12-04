@@ -35,8 +35,6 @@ func (m *module) validSource(ip net.IP) bool {
 }
 
 func (m *module) ServeHTTP(w http.ResponseWriter, req *http.Request) (int, error) {
-	hVal := req.Header.Get(m.Header)
-	req.Header.Del(m.Header)
 
 	addr, port, err := net.SplitHostPort(req.RemoteAddr)
 	if err != nil {
@@ -55,6 +53,7 @@ func (m *module) ServeHTTP(w http.ResponseWriter, req *http.Request) (int, error
 		return 403, fmt.Errorf("Unrecognized proxy ip address: %s", addr)
 	}
 
+	hVal := req.Header.Get(m.Header)
 	if hVal == "" {
 		return m.next.ServeHTTP(w, req)
 	}
