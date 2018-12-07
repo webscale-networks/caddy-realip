@@ -49,8 +49,11 @@ func (m *module) ServeHTTP(w http.ResponseWriter, req *http.Request) (int, error
 		return m.next.ServeHTTP(w, req) // Change nothing and let next deal with it.
 	}
 
-	if m.Strict && !m.validSource(ip) {
-		return 403, fmt.Errorf("Unrecognized proxy ip address: %s", addr)
+	if !m.validSource(ip) {
+		if m.Strict {
+			return 403, fmt.Errorf("Unrecognized proxy ip address: %s", addr)
+		}
+		return m.next.ServeHTTP(w, req)
 	}
 
 	hVal := req.Header.Get(m.Header)
@@ -68,8 +71,7 @@ func (m *module) ServeHTTP(w http.ResponseWriter, req *http.Request) (int, error
 	}
 
 	// Convert entire parts array into ip address array
-	ips := make([]net.IP, len(parts)+1)
-	ips[len(parts)] = ip
+	ips := make([]net.IP, len(parts))
 	for i := 0; i < len(parts); i++ {
 		ip := net.ParseIP(parts[i])
 		if ip == nil {
@@ -81,15 +83,18 @@ func (m *module) ServeHTTP(w http.ResponseWriter, req *http.Request) (int, error
 		ips[i] = ip
 	}
 
-	for len(ips) > 0 && m.validSource(ips[len(ips)-1]) {
+	for len(ips) > 1 && m.validSource(ips[len(ips)-1]) {
 		ips = ips[:len(ips)-1]
+		parts = parts[:len(parts)-1]
 	}
 
-	if len(ips) > 0 {
-		req.RemoteAddr = net.JoinHostPort(ips[len(ips)-1].String(), port)
-		if len(parts) >= len(ips) {
-			req.Header.Set(m.Header, strings.Join(parts[:len(ips)-1], ","))
-		}
+	req.RemoteAddr = net.JoinHostPort(parts[len(parts)-1], port)
+	parts = parts[:len(parts)-1]
+	headerval := strings.Join(parts, ",")
+	if headerval == "" {
+		req.Header.Del(m.Header)
+	} else {
+		req.Header.Set(m.Header, headerval)
 	}
 	return m.next.ServeHTTP(w, req)
 }

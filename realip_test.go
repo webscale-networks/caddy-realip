@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 
 	"bytes"
@@ -26,6 +27,7 @@ func TestRealIP(t *testing.T) {
 		{"4.4.0.0:123", "1.2.3.4", "4.4.0.0:123", "1.2.3.4"},
 		{"4.5.0.0:123", "1.2.3.4", "1.2.3.4:123", ""},
 		{"4.5.0.0:123", "1.2.3.4, 4.4.0.1, 4.5.0.1", "4.4.0.1:123", "1.2.3.4"},
+		{"4.5.0.0:123", "4.5.2.0, 4.5.1.0", "4.5.2.0:123", ""},
 
 		// because 111.111.111.111 is NOT in a trusted subnet, the next in the chain should not be trusted
 		{"4.5.2.3:123", "1.2.6.7,5.6.7.8,111.111.111.111", "111.111.111.111:123", "1.2.6.7,5.6.7.8"},
@@ -70,9 +72,17 @@ func TestRealIP(t *testing.T) {
 		if remoteAddr != test.expectedIP {
 			t.Errorf("Test %d: Expected '%s', but found '%s'", i, test.expectedIP, remoteAddr)
 		}
-		actualHeader := req.Header.Get("X-Real-IP")
-		if actualHeader != test.expectedHeader {
-			t.Errorf("Test %d: Expected header '%s', but found '%s'", i, test.expectedHeader, actualHeader)
+		if test.expectedHeader == "" {
+			header := req.Header["X-Real-Ip"]
+			if len(header) != 0 {
+				t.Errorf("Test %d: Found header %#v, expected none", i, header)
+			}
+		} else {
+			expected := []string{test.expectedHeader}
+			actual := req.Header["X-Real-Ip"]
+			if !reflect.DeepEqual(actual, expected) {
+				t.Errorf("Test %d: Expected header %#v, but found %#v %q", i, expected, actual, req.Header.Get("X-Real-Ip"))
+			}
 		}
 	}
 }
