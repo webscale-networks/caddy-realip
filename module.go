@@ -58,6 +58,8 @@ func (m *module) ServeHTTP(w http.ResponseWriter, req *http.Request) (int, error
 
 	hVal := req.Header.Get(m.Header)
 	if hVal == "" {
+		// Discard any XFF header values for upstream processing.
+		req.Header.Del("X-Forwarded-For")
 		return m.next.ServeHTTP(w, req)
 	}
 
@@ -91,10 +93,13 @@ func (m *module) ServeHTTP(w http.ResponseWriter, req *http.Request) (int, error
 	req.RemoteAddr = net.JoinHostPort(parts[len(parts)-1], port)
 	parts = parts[:len(parts)-1]
 	headerval := strings.Join(parts, ",")
-	if headerval == "" {
-		req.Header.Del(m.Header)
+	if headerval != "" {
+		req.Header.Set("X-Forwarded-For", headerval)
 	} else {
-		req.Header.Set(m.Header, headerval)
+		// Discard any XFF header values for upstream processing.
+		req.Header.Del("X-Forwarded-For")
 	}
+	// Discard the incoming header as upstream processing relies on XFF.
+	req.Header.Del(m.Header)
 	return m.next.ServeHTTP(w, req)
 }
